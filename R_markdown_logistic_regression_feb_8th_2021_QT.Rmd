@@ -1,0 +1,839 @@
+---
+title: "logistic_regression_modelling_QT"
+author: "Queenie"
+date: "08/02/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r echo=FALSE}
+#import packages;
+library(tidyverse)
+library(dplyr)
+library(reshape2)
+library(ggplot2)
+library(Hmisc)
+library(corrplot)
+library(mice)
+library(VIM)
+library(pROC)
+library(caret)
+library(sqldf)
+library(RColorBrewer)
+library(viridis)
+library(stringr)
+```
+
+## set directory to where census income dataset is located:
+
+#load data from directory:
+```{r }
+
+data <- read_csv("adult.data", col_names = c("age", "workclass", "fnl_wgt", "education", "education_num", "marital_status", "occupation", "relationship", "race", "sex", "capital_gain", "capital_loss", "hours_per_week", "native_country", "income"))
+
+```
+#look at dimensions of dataset:
+```{r}
+dim(data)
+```
+
+```{r}
+View(data)
+```
+#preview dataset:
+```{r}
+head(data,10)
+```
+```{r}
+str(data)
+```
+
+```{r}
+summary(data)
+```
+
+#check distribution of target variable which is class:
+```{r}
+
+table(data$income)
+```
+
+
+#look at target variable income:
+```{r}
+
+ggplot(data = data) +
+  geom_bar(mapping = aes(x = income))
+```
+
+#testing for missing values:
+```{r}
+
+sapply(data, function(x) sum(is.na (x)))
+```
+
+#from the Feature Engineering.R  class example file to get the numeric columns only:
+```{r}
+
+list_of_numcols = sapply(data, is.numeric)
+numcols = data[ , list_of_numcols]
+```
+#histograms for numeric variables:
+```{r}
+
+hist(data$age)
+
+```
+#age vs income
+```{r}
+
+ggplot(data = data, aes(x=income, y = age)) +
+  geom_boxplot(aes(fill=income))
+```
+#fnlwght vs income
+```{r}
+
+ggplot(data = data, aes(x=income, y = fnl_wgt)) +
+  geom_boxplot(aes(fill=income))
+```
+#education_num vs income
+```{r}
+
+ggplot(data = data, aes(x=income, y = education_num)) +
+  geom_boxplot(aes(fill=income))
+```
+#capital_gain vs income
+```{r}
+
+ggplot(data = data, aes(x=income, y = capital_gain)) +
+  geom_boxplot(aes(fill=income))
+```
+#capital_loss vs income
+```{r}
+
+ggplot(data = data, aes(x=income, y = capital_loss)) +
+  geom_boxplot(aes(fill=income))
+```
+
+
+```{r}
+#hours per week vs income
+ggplot(data = data, aes(x=income, y = hours_per_week)) +
+  geom_boxplot(aes(fill=income))
+```
+
+```{r}
+##################looking at categorical variables:#########
+attach(data)
+freq_tbl=table(sex)
+head(freq_tbl)
+```
+```{r}
+#to get proportion, input frequency table:
+prop.table(freq_tbl)
+```
+```{r}
+#looking at education:
+freq_tbl_education= table(education)
+head(freq_tbl_education)
+prop.table(freq_tbl_education)
+```
+
+```{r}
+#look at target variable income with respect to education:
+freq_xtab=xtabs(~education+income)
+head(freq_xtab)
+
+```
+
+```{r}
+#cross-tab for 2 categorical features, this time with proportions:
+prop.table(freq_xtab)
+```
+```{r}
+#use DPLYR to see the relationship between education and education-num:
+income_by_education =
+  data %>% 
+  group_by(education) %>%
+  summarise(education_num = mean(education_num, na.rm = TRUE))
+```
+```{r}
+#creating a mosaic plot (plot of proportions)
+mosaicplot(freq_tbl)
+mosaicplot(freq_tbl_education)
+
+```
+
+```{r}
+########looking at categorical variables#################:
+mosaicplot(table(occupation))
+```
+```{r}
+#Stacked bar-plot - i.e. plotting it x-tab
+freq_xtab=xtabs(~occupation+income)
+head(freq_xtab)
+```
+```{r}
+#basic bar-plot will automatically be stacked if we give it the x-tab table as an input
+#barplot of occupation vs income:
+barplot(freq_xtab)
+barplot(prop.table(freq_xtab))
+barplot(prop.table(freq_xtab,2),
+        legend=rownames(freq_xtab),  beside = TRUE,
+        ylab = "income", xlab = "occupation",
+        main = "looking at proportions of different occupations in relation to the 2 salary classes",
+        xlim = c(0,60),
+        col = viridis(10))
+```
+
+```{r}
+#look at workclass versus income (2 categorical variables)
+workclass_vs_income_freq_xtab=xtabs(~workclass+income)
+head(workclass_vs_income_freq_xtab)
+```
+
+```{r}
+workclass_vs_income_freq_xtab = table(workclass, income) #create a simple frequency table of workclass vs class
+workclass_vs_income_pct_xtab = prop.table(workclass_vs_income_freq_xtab, 2)  #turn into a proportion table
+barplot(workclass_vs_income_pct_xtab,
+        legend=rownames(workclass_vs_income_pct_xtab), beside = TRUE,
+        ylab = "income", xlab = "workclass",
+        main = "proportions of workclass in relation to income",
+        xlim = c(0, 40),
+        col = viridis(10))
+```
+
+```{r}
+#plotting marital status vs income:
+marital_status_vs_income_freq_xtab=xtabs(~marital_status+income)
+head(marital_status_vs_income_freq_xtab)
+```
+
+```{r}
+marital_status_vs_income_freq_xtab = table(marital_status,income)
+marital_status_vs_income_pct_xtab = prop.table(marital_status_vs_income_freq_xtab,2)
+barplot(marital_status_vs_income_pct_xtab,
+        legend= rownames(marital_status_vs_income_pct_xtab), beside = TRUE,
+        ylab = "income", xlab = "marital status",
+        main = "proportions of marital status in relation to class",
+        xlim = c(0, 40),   #this is used to move legend to the right
+        col = viridis(10))
+#not sure why yellow colour in one of the columns but not in the legend??
+```
+
+```{r}
+#plotting education vs income
+ggplot(data = data, aes(y = education, fill = income)) +
+  geom_bar(position = "stack")   #different bars stacked together
+```
+
+```{r}
+ggplot(data = data, aes(y = education, fill = income)) +
+  geom_bar(position = "dodge")   #different bars side by side
+```
+
+```{r}
+#plotting native country vs. income
+ggplot(data = data, aes(y = native_country, fill = income))+
+  geom_bar(position = "stack")
+```
+
+```{r}
+#plotting occupation vs income
+ggplot(data = data, aes(y = occupation, fill = income))+
+  geom_bar(position = "dodge")
+```
+```{r}
+#plotting marital status vs. income
+ggplot(data = data, aes(y = marital_status, fill = income))+
+  geom_bar(position = "dodge")
+```
+
+```{r}
+#plot workclass vs. income
+ggplot(data = data, aes(y = workclass, fill = income))+
+  geom_bar(position = "dodge")
+```
+
+
+
+```{r}
+#missing values are represented by "?" in the dataset
+
+#convert ? values to NA in dataset and save into new dataframe:
+data_NA <- as.data.frame(data %>% 
+                           mutate_if(is.character, list(~na_if(., "?"))))
+```
+####missing values ##########
+
+#####getting the percentage of missing values:
+
+```{r}
+percent_missing = function(x){sum(is.na(x))/length(x)*100}
+apply(data_NA,2,percent_missing)
+
+```
+```{r}
+#look at distinct native countries and the counts for each:
+data_NA %>% count(native_country)
+```
+```{r}
+#replace "Hong" to "Hong Kong" in native_country column for clarity:
+data_NA$native_country <-  str_replace(as.character(data_NA$native_country), "Hong", "Hong Kong")
+```
+```{r}
+#total missing NA values:
+sum(is.na(data_NA))
+```
+
+```{r}
+#compute the total missing values in each column:
+colSums(is.na(data_NA))
+```
+```{r}
+####missing values ##########
+
+#####getting the percentage of missing values:
+
+percent_missing = function(x){sum(is.na(x))/length(x)*100}
+apply(data_NA,2,percent_missing)
+```
+```{r}
+#visualizing missing values:
+##install.packages("mice")
+library(mice)
+
+md.pattern(data_NA)
+```
+###1's represents variable presence
+#### 0's under each variable represent their missing state 
+
+###there are 7 rows where occupation is missing. 
+###there are 1809 rows where workclass and occupation are missing. 
+###there are 27 rows where native country, workclass and occupation are missing.
+
+```{r}
+##look at whether there is duplicate data:
+
+duplicated(data_NA)
+```
+```{r}
+#to get the original number of rows in dataset:
+nrow(data_NA)
+```
+```{r}
+#apply unique() on a data frame, for removing duplicated rows:
+data_unique <- unique(data_NA)
+nrow(data_unique)
+```
+###the difference between the number of rows of original data and the unique dataset is 24, meaning
+###there were 24 duplicate rows of data which have now been removed. 
+
+```{r}
+#visualize the missing data:
+library(VIM)
+#The function VIM aggr calculates and represents the number of missing entries in each 
+#variable and for certain combinations of variables (which tend to be missing simultaneously)
+aggr_plot = aggr(data_unique, col=c('skyblue','red', 'orange'), numbers=TRUE, sortVars=TRUE, labels=names(data_unique), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+
+```
+```{r}
+#missing values margin plot:
+#Drawing margin plot
+
+#http://juliejosse.com/wp-content/uploads/2018/06/DataAnalysisMissingR.html:
+# The VIM function marginplot creates a scatterplot with additional information on the missing values.
+# If you plot the variables (x,y), the points with no missing values are represented as in a standard 
+# scatterplot. The points for which x (resp. y) is missing are represented in red along the y (resp. x)
+# axis. In addition, boxplots of the x and y variables are represented along the axes with and without 
+# missing values (in red all variables x where y is missing, in blue all variables x where y is observed).
+marginplot(data_unique[, c("workclass", "occupation")])
+```
+```{r}
+#from http://juliejosse.com/wp-content/uploads/2018/06/DataAnalysisMissingR.html:
+#The VIM function matrixplot creates a matrix plot in which all cells of a data matrix are
+#visualized by rectangles. Available data is coded according to a continuous color scheme 
+#(gray scale), while missing/imputed data is visualized by a clearly distinguishable color (red). 
+#If you use Rstudio the plot is not interactive (there are the warnings), but if you use R directly, 
+#you can click on a column of your choice: the rows are sorted (decreasing order) of the values of this column. 
+#This is useful to check if there is an association between the value of a variable and the missingness of another one
+matrixplot(data_unique, sortby = 2)
+```
+
+```{r}
+##look at the proportional distribution of occupation feature:
+data_unique %>%
+  select(occupation, income) %>%
+  table() %>%
+  prop.table()
+```
+
+```{r}
+#########Numeric variables ########
+hist(data_unique$age)
+hist(data_unique$capital_gain)
+hist(data_unique$capital_loss)
+```
+```{r}
+#making histograms for all numeric variables:
+list_of_numcols = sapply(data_unique, is.numeric)
+numcols = data_unique[ , list_of_numcols]
+```
+```{r}
+#Step 2: Melt data --> Turn it into skinny LONG table
+melt_data = melt(numcols)
+head(melt_data, 10)
+```
+```{r}
+#multiplot histograms of numeric variables:
+ggplot(data = melt_data, mapping = aes(x = value)) + geom_histogram(bins = 10) + facet_wrap(~variable, scales = 'free_x')
+
+```
+```{r}
+#visualizing numeric variables in relation to the target variable income:
+library(Hmisc)    #used for binning numeric variable:
+```
+```{r}
+#create a factor to bin the ages:
+binned_age = cut2(data_unique$age, g=10, minmax=TRUE, oneval=TRUE)
+data_age_binned = cbind(data_unique, binned_age)
+head(data_age_binned)
+```
+
+```{r}
+#visualize age vs. income class:
+ggplot(data_age_binned, aes(binned_age, ..count..)) + geom_bar(aes(fill = income), position = "dodge")
+```
+```{r}
+#visualize hours per week vs income class:
+binned_hours_per_week = cut2(data_unique$hours_per_week, g=10, minmax=TRUE, oneval=TRUE)
+data_age_hours = cbind(data_age_binned, binned_hours_per_week)    #combine the new factor for binned hours with the binned_age dataframe
+ggplot(data_age_hours, aes(binned_hours_per_week, ..count..)) + geom_bar(aes(fill = income), position = "dodge")
+
+```
+```{r}
+##looking at relationship between numeric variables:
+numeric_cols = sapply(data_unique, is.numeric)
+data_num_only=data_unique[,numeric_cols]
+
+data_num_only
+
+```
+
+
+```{r}
+#Correlation Matrix - default one in R
+cor(data_num_only)
+```
+```{r}
+cor_result=rcorr(as.matrix(data_num_only))
+
+cor_result$r
+```
+```{r}
+#look at income with respect to age:
+income_by_age = 
+  data_NA %>%
+  group_by(income) %>%
+  summarise(mean_age = mean(age, na.rm = TRUE))
+```
+```{r}
+#flattening correlation plot
+flattenCorrMatrix <- function(cormat, pmat) {
+  ut <- upper.tri(cormat)
+  data.frame(
+    row = rownames(cormat)[row(cormat)[ut]],
+    column = rownames(cormat)[col(cormat)[ut]],
+    cor  =(cormat)[ut],
+    p = pmat[ut]
+  )
+}
+```
+```{r}
+#flatten correlation matrix:
+cor_result_flat = flattenCorrMatrix(cor_result$r, cor_result$P)
+head(cor_result_flat)
+```
+```{r}
+#visualize with a correlogram:
+library(corrplot)
+corrplot(cor_result$r, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45)
+```
+
+
+
+
+#to convert all character columns of dataframe to a factor:
+
+```{r}
+data_factor <- data_unique %>%
+  mutate_if(sapply(data_unique, is.character), as.factor)
+```
+```{r}
+str(data_factor)
+```
+```{r}
+#remove rows with missing values:
+data_factor <- na.omit(data_factor)
+```
+
+```{r}
+dim(data_factor)
+```
+```{r}
+#following this example: https://datascienceplus.com/perform-logistic-regression-in-r/ 
+
+#use the contrasts() function to check how the categorical variables have been dummified by R:
+contrasts(data_factor$sex)
+```
+```{r}
+contrasts(data_factor$workclass)
+```
+
+
+#Splitting the data into training and test sets:
+
+###this version of the dataset omits the NA values:
+## Modified from Introduction to Machine Learning with R: Rigorous Mathematical Model by Scott V. Burger p.23
+
+#### split data into 80% for training and 20% for testing
+```{r}
+split_size = 0.8
+sample_size = floor(split_size * nrow(data_factor))
+
+set.seed(123)
+train_indices <- sample(seq_len(nrow(data_factor)), size = sample_size)
+
+train <- data_factor[train_indices, ]
+test <- data_factor[-train_indices,]
+```
+
+```{r}
+#following this example: https://datascienceplus.com/perform-logistic-regression-in-r/ 
+
+#train the model, and omit education_num since it's redundant information with education (including it will give NA values)
+model <- glm(income ~., data=train[ , !(names(train) %in% c('education_num'))], family=binomial(link='logit'))   
+
+summary(model)
+```
+
+### age, workclass, education (Bachelors, Doctorate, Masters, Prof-school), marital_status, occupation, relationship (relationshipWife), sexMale, capital_gain, capital_loss, and hours_per_week have the lowest P values which suggests that these predictors have a strong association with the income class. 
+#### native_country is not significant. Neither is education from preschool to grade 12. 
+
+```{r}
+#running the anova function to analyze the analysis of variance: 
+anova(model, test="Chisq")
+```
+### marital_status, education, capital_gain, age have the greatest deviance values, and thus
+### produces the greatest decrease in residual deviance.  
+### fnl_wght is not statistically significant.
+
+
+```{r}
+library(pscl)
+pscl::pR2(model)
+```
+
+```{r}
+#using the model to predict on test data set:
+fitted.results <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,10,11,12,13,14)), type='response')   #omitting column 5 which is education number
+
+fitted.results
+
+fitted.results <- ifelse(fitted.results > 0.5, ">50K", "<=50K")           #if the probability is greater than 0.5, y=1, otherwise y=0. Decision boundar is 0.5
+
+misclassification_error <- mean(fitted.results != test$income)  
+print(paste('Accuracy', 1 - misclassification_error))
+```
+
+# Evaluating Logistic Regression Models 
+
+### Following tutorial from:
+### https://www.r-bloggers.com/2015/08/evaluating-logistic-regression-models/
+
+##Classification Rate
+
+### Examine how well the model does in predicting the target observations on a test set. 
+### Compare the predicted observations versus actual observations of the target variable.
+```{r}
+
+# use the test set:
+fitted.results <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,10,11,12,13,14)), type='response')
+fitted.results <- ifelse(fitted.results > 0.5, ">50K", "<=50K")
+accuracy <- table(fitted.results, test[,"income"])
+sum(diag(accuracy))/sum(accuracy)
+```
+
+```{r}
+#confusion matrix
+fitted.results <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,10,11,12,13,14)), type='response')
+fitted.results <- ifelse(fitted.results > 0.5, ">50K", "<=50K")
+pred <- as.factor(fitted.results)
+confusionMatrix(data=pred, test$income)
+```
+
+#Accuracy = (TP + TN) / (TP + TN + FP + FN) = 0.8441
+#Recall (sensitivity) = ratio of total positive / total classified as positive = (TP) /(TP + FN) 
+          #sensitivity should be high
+#Precision =  total number of correctly classified positive classes divided by the total number of predicted positive classes = TP/(TP + FP)
+          #precision should be high
+#Specificity = TN/(TN + FP) =  proportion of actual negatives that are correctly identified.
+
+#plot the ROC curve and calculate Area Under the Curve:
+
+#ROC curve plots the True Positive Rate with the False Positive Rate, at different threshold settings.
+#AUC is the area under the curve, and the better a model is the closer the AUC is to 1, rather than
+#to 0.5.
+#values above 0.80 indicate that the model does a good job in discriminating between the two categories which comprise our target variable
+
+```{r}
+library(ROCR)
+p <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,10,11,12,13,14)), type="response")
+pr <- prediction(p, test$income)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
+
+##############################Evaluating the Logistic Regression Model:
+
+####Wald Test
+
+#this test is used to evaluate individual predictors and their statistical significance on the model. 
+#Method: Calculate the ratio of the square of the regression coefficient to the square of the 
+#standard error of the coefficient. 
+
+#Null hypothesis: the coefficient of the variable is NOT significantly different from zero. 
+#Alternate hypothesis: the coefficient of the variable IS significantly different from zero.
+
+#If the coefficient of the variable is not significantly different from zero, it will not reject the null hypothesis,
+#meaning if you take out that variable, it will not significantly affect the model fit.
+
+```{r}
+library(survey)
+regTermTest(model, "native_country")
+```
+since p= 0.0081029, which is less than 0.05, we reject the null hypothesis that the coefficient of native_country
+is not significantly different from zero. 
+
+```{r}
+regTermTest(model, "fnl_wgt")
+```
+For fnl_wgt, the p= 0.00039934 is less than 0.05, so we reject the null hypothesis that the coefficient of fnl_wght
+ is not significantly different from zero. 
+
+```{r}
+##############look at the absolute value of the t-statistic for each predictor:
+varImp(model) 
+```
+
+capital gain, capital loss, age, hours per week, education- Prof School has the highest 
+t-statistic absolute values. 
+
+
+
+
+
+
+
+
+
+########################################################
+
+# this version tries to replace the missing values with the most common value of that variable:
+
+```{r}
+View(data_unique)
+
+data_unique %>% count(workclass)
+
+```
+```{r}
+#replicate data:
+data1 <-data_unique
+```
+```{r}
+#replace workclass NA values with "Private"
+data1 <- data1 %>%
+  mutate(workclass = if_else(is.na(workclass), "Private", workclass))
+```
+
+```{r}
+data1 %>% count(workclass)
+```
+```{r}
+data1 %>% count(occupation)
+```
+
+```{r}
+#replace the missing values in occupation column with "Prof-Specialty" which is the most common value:
+data1 <- data1 %>%
+  mutate(occupation = if_else(is.na(occupation), "Prof-specialty", occupation))
+```
+```{r}
+#double check occupation missing values have been replaced in occupation column:
+data1 %>% count(occupation)
+```
+
+```{r}
+data1 %>% count(native_country)
+
+#United-States is the most common value for native country
+#so replace NA values with United States:
+data1 <- data1 %>%
+  mutate(native_country = if_else(is.na(native_country), "United-States", native_country))
+
+data1 %>% count(native_country)
+
+str(data1)
+```
+
+```{r}
+#to convert all character columns of dataframe to a factor:
+data1_factor <- data1 %>%
+  mutate_if(sapply(data1, is.character), as.factor)
+
+str(data1)
+```
+
+# Splitting the data into training and test sets:
+
+##version where missing values are imputed with most common values:
+
+```{r}
+split_size = 0.8
+sample_size = floor(split_size * nrow(data1_factor))
+
+set.seed(123)
+train_indices <- sample(seq_len(nrow(data1_factor)), size = sample_size)
+
+train <- data1_factor[train_indices, ]
+test <- data1_factor[-train_indices,]
+
+model <- glm(income ~., data=train[ , !(names(train) %in% c('education_num'))], family=binomial(link='logit'))
+
+
+summary(model)
+```
+
+##############Goodness of Fit Evaluation########
+
+### https://www.r-bloggers.com/2015/08/evaluating-logistic-regression-models/ 
+
+### to test whether the observed difference in model fit is statistically significant, use ANOVA chi-squared test: 
+
+
+```{r}
+anova(model, test="Chisq")
+```
+#fnl_wgt is not significant. 
+#from the anova test, marital status, education, capital_gain, and age have the greatest deviance. 
+
+```{r}
+library(pscl)
+pscl::pR2(model)   #look at the McFadden value:
+```
+#source help: https://www.r-bloggers.com/2015/08/evaluating-logistic-regression-models/:
+
+#McFadden’s R2 = 1−[ln(LM)/ln(L0)],  where ln(LM) is the log likelihood value for the fitted model
+#ln(L0) is the log likelihood for the null model with only an intercept as a predictor
+# McFadden values range from 0 to 1, and values closer to 0 indicate models have little predictive power.
+
+```{r}
+#using the model to predict on test data set:
+fitted.results <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,10,11,12,13,14)), type='response')   #omitting column 5 which is education number
+
+fitted.results
+
+fitted.results <- ifelse(fitted.results > 0.5, ">50K", "<=50K")           #if the probability is greater than 0.5, income is >50K, otherwise income is =<50K. Decision boundary is 0.5
+
+```
+
+```{r}
+misclassification_error <- mean(fitted.results != test$income)  
+print(paste('Accuracy', 1 - misclassification_error))
+```
+
+
+
+
+# this version is going to keep the NA values within the original dataset
+### duplicate rows have been removed & native country "Hong" has been changed to "Hong Kong"
+```{r}
+data_with_NA <- data_unique
+
+dim(data_with_NA)
+
+#to convert all character columns of dataframe to a factor:
+data_NA_factor <- data_with_NA %>%
+  mutate_if(sapply(data_with_NA, is.character), as.factor)
+```
+
+```{r}
+##splitting dataset into test and train data:
+split_size = 0.8
+sample_size = floor(split_size * nrow(data_NA_factor))
+
+set.seed(123)
+train_indices <- sample(seq_len(nrow(data_NA_factor)), size = sample_size)
+
+train <- data_NA_factor[train_indices, ]
+test <- data_NA_factor[-train_indices,]
+
+model <- glm(income ~., data=train[ , !(names(train) %in% c('education_num'))], family=binomial(link='logit'))
+
+
+summary(model)
+```
+#age, educationBachelors, educationDoctorate, relationshipWife, capital_gain, capital_loss,  hours_per_week, 
+#occupationExec-managerial, educationMasters, educationProf-school are the most significant predictors 
+#with p value < 2e-16.
+
+```{r}
+anova(model, test="Chisq")
+```
+```{r}
+library(pscl)
+pscl::pR2(model)
+```
+###https://www.r-bloggers.com/2015/08/evaluating-logistic-regression-models/
+### "McFadden’s R2, which is defined as 1−[ln(LM)/ln(L0)] where ln(LM) is the log likelihood value for 
+### the fitted model and ln(L0) is the log likelihood for the null model with only an intercept as a
+### predictor. The measure ranges from 0 to just under 1, with values closer to zero indicating that
+### the model has no predictive power."
+
+### The McFadden value is 4.249612e-01.
+
+
+# testing the model on the test set:
+
+```{r}
+fitted_results_with_NA <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,10,11,12,13,14)), type='response')   #omitting column 5 which is education number
+
+fitted_results_with_NA
+
+fitted_results_with_NA <- ifelse(fitted_results_with_NA > 0.5, ">50K", "<=50K")           #if the probability is greater than 0.5, income is >50K, otherwise income is =<50K. Decision boundary is 0.5
+
+```
+
+```{r}
+#take the mean value of 
+misclassification_error <- mean(fitted_results_with_NA != test$income)  
+print(paste('Accuracy', 1 - misclassification_error))
+```
+
+
+
+
