@@ -549,12 +549,13 @@ fitted.results <- predict(model, newdata=subset(test, select=c(1,2,3,4,6,7,8,9,1
 
 fitted.results
 
-fitted.results <- ifelse(fitted.results > 0.5, ">50K", "<=50K")           #if the probability is greater than 0.5, y=1, otherwise y=0. Decision boundar is 0.5
+fitted.results <- ifelse(fitted.results > 0.5, ">50K", "<=50K")           #if the probability is greater than 0.5, y=1, otherwise y=0. Decision boundary is 0.5
 
+```
+```{r}
 misclassification_error <- mean(fitted.results != test$income)  
 print(paste('Accuracy', 1 - misclassification_error))
 ```
-
 # Evaluating Logistic Regression Models 
 
 ### Following tutorial from:
